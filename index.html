@@ -27,21 +27,26 @@
   html,body{margin:0;padding:0;color:var(--text);}
   body{
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
-    max-width:520px;margin:0 auto;min-height:100vh;
+    max-width:520px;margin:0 auto;min-height:100vh;   /* 中身は中央寄せ・最大520pxのまま */
     padding:env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 24px);
     -webkit-text-size-adjust:100%;
-    /* 背景を body に直接指定。複数背景はカンマ区切りで「先頭ほど手前」。
-       手前→奥: 暗いオーバーレイ(α0.5) → bg.png(相対パス・小文字) → フォールバックのグラデ(藍紫→橙→暗緑)。
-       background-color は最背面の下地。--bg/#000 で上書きされないよう body には var(--bg) を使わない。 */
-    background-color:#10131f;
+  }
+  /* 背景はコンテンツ幅(520px)に縛られないよう、画面全体を覆う固定レイヤ(::before/::after)で敷く。
+     position:fixed; inset:0 でビューポート全面(100vw×100vh)に固定 →
+     左右の黒余白なし・縦に長くスクロールしても背景は動かず途切れない。 */
+  body::before{                                       /* bg.png + フォールバックのグラデ */
+    content:"";position:fixed;inset:0;z-index:-2;
+    background-color:#10131f;                          /* 画像読込前/失敗でも#000の真っ黒にしない */
     background-image:
-      linear-gradient(rgba(10,10,30,0.5), rgba(10,10,30,0.5)),
       url("bg.png"),
       linear-gradient(160deg,#2a1f6b 0%,#c2410c 55%,#143524 100%);
-    background-repeat:no-repeat,no-repeat,no-repeat;
-    background-position:center center,center 30%,center center;
-    background-size:cover,cover,cover;
-    background-attachment:fixed,fixed,fixed;       /* スクロールしても固定的に見せる（iOSでは画像は表示・固定は簡略化） */
+    background-repeat:no-repeat,no-repeat;
+    background-position:center center,center center;
+    background-size:cover,cover;                       /* cover・中央。固定レイヤなのでスクロールしても動かない */
+  }
+  body::after{                                        /* 可読性確保の暗いオーバーレイ(α0.5) */
+    content:"";position:fixed;inset:0;z-index:-1;
+    background:rgba(10,10,30,0.5);pointer-events:none;
   }
   header{
     text-align:center;font-size:15px;color:var(--muted);
