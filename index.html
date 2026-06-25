@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>副業ストップウォッチ</title>
+<style>
+  :root{
+    --bg:#000;
+    --panel:#141414;
+    --panel2:#1d1d1d;
+    --line:#2a2a2a;
+    --text:#f2f2f2;
+    --muted:#8a8a8a;
+    --accent:#2ec27e;      /* スタート/通常の緑 */
+    --accent-dim:#1f6b48;
+    --stop:#e5484d;        /* ストップの赤 */
+    --bar:#3a3a3a;         /* 棒グラフ(通常) */
+    --bar-today:#2ec27e;   /* 棒グラフ(今日) */
+    --goal:#f5a623;        /* 目標ライン(琥珀) */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
+    max-width:520px;margin:0 auto;
+    padding:env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 24px);
+    -webkit-text-size-adjust:100%;
+  }
+  header{
+    text-align:center;font-size:15px;color:var(--muted);
+    padding:14px 0 6px;letter-spacing:.05em;
+  }
+  section{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:16px;margin-top:12px;
+  }
+
+  /* タイマー(最重要) */
+  .timer-card{padding:22px 16px 18px;text-align:center;}
+  .timer{
+    font-size:clamp(56px,18vw,88px);
+    font-weight:700;line-height:1.05;
+    font-variant-numeric:tabular-nums;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    letter-spacing:.01em;
+  }
+  .timer.run{color:var(--accent);}
+  .today{margin-top:8px;color:var(--muted);font-size:14px;}
+  .toggle{
+    margin-top:18px;width:100%;height:78px;border:none;border-radius:14px;
+    font-size:26px;font-weight:700;color:#fff;background:var(--accent);
+    cursor:pointer;touch-action:manipulation;
+  }
+  .toggle.run{background:var(--stop);}
+  .toggle:active{filter:brightness(.9);}
+
+  /* 目標 */
+  .goal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;color:var(--muted);}
+  .goal-head input{
+    width:96px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    color:var(--text);font-size:16px;padding:8px 10px;text-align:right;
+  }
+  .bar{height:14px;background:var(--panel2);border-radius:7px;overflow:hidden;margin:12px 0 8px;}
+  .bar-fill{height:100%;width:0;background:var(--accent);border-radius:7px;}
+  .goal-text{font-size:13px;color:var(--muted);}
+
+  /* 統計 */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center;}
+  .stat-val{font-size:19px;font-weight:700;white-space:nowrap;}
+  .stat-label{font-size:12px;color:var(--muted);margin-top:3px;}
+
+  /* グラフ */
+  .chart-head{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:6px;}
+  #chart svg{display:block;width:100%;height:auto;}
+  .chart-info{font-size:13px;color:var(--muted);margin-top:8px;min-height:1.2em;}
+
+  /* 入出力 */
+  .io{display:flex;flex-direction:column;gap:10px;}
+  .io button{
+    width:100%;height:52px;border:1px solid var(--line);border-radius:10px;
+    background:var(--panel2);color:var(--text);font-size:16px;font-weight:600;
+    cursor:pointer;touch-action:manipulation;
+  }
+  .io button:active{filter:brightness(1.2);}
+  .note{font-size:12px;color:var(--muted);text-align:center;margin-top:14px;line-height:1.6;}
+</style>
+</head>
+<body>
+  <header>副業ストップウォッチ</header>
+
+  <section class="timer-card">
+    <div class="timer" id="timer">00:00:00</div>
+    <div class="today" id="todayLine">本日 0分</div>
+    <button class="toggle" id="toggle">スタート</button>
+  </section>
+
+  <section class="goal-card">
+    <div class="goal-head">
+      <span>1日の目標時間</span>
+      <span><input type="number" id="goalInput" inputmode="numeric" min="0" step="5" placeholder="0"> 分</span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="goalFill"></div></div>
+    <div class="goal-text" id="goalText">目標未設定</div>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><div class="stat-val" id="weekVal">0分</div><div class="stat-label">今週</div></div>
+    <div class="stat"><div class="stat-val" id="monthVal">0分</div><div class="stat-label">今月</div></div>
+    <div class="stat"><div class="stat-val" id="streakVal">0日</div><div class="stat-label">連続</div></div>
+  </section>
+
+  <section class="chart-card">
+    <div class="chart-head"><span>直近30日</span><span id="chartMax"></span></div>
+    <div id="chart"></div>
+    <div class="chart-info" id="chartInfo">棒をタップすると日付と時間を表示</div>
+  </section>
+
+  <section class="io">
+    <button id="csvBtn">CSV書き出し（Excel用）</button>
+    <button id="jsonBtn">JSONバックアップ</button>
+    <button id="importBtn">JSONから復元</button>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+  </section>
+
+  <div class="note">データはこの端末のブラウザ内（localStorage）に保存されます。<br>機種変更前は必ずJSONバックアップを取得してください。</div>
+
+<script>
+"use strict";
+
+/* ===== 保存・状態 ===== */
+const KEY = "sidejob_timer_v1";
+// state.days: { "YYYY-MM-DD": 秒 } / state.goalMinutes: 分 / state.run: 計測中の情報 or null
+let state = { days:{}, goalMinutes:0, run:null };
+
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const o = JSON.parse(raw);
+      state.days = (o && typeof o.days==="object" && o.days) ? o.days : {};
+      state.goalMinutes = Number(o.goalMinutes)||0;
+      state.run = (o.run && typeof o.run.sessionStart==="number") ? o.run : null;
+    }
+  }catch(e){ /* 壊れていても起動できるよう無視 */ }
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
+}
+
+/* ===== 補助関数 ===== */
+const pad = (n,l=2)=>String(n).padStart(l,"0");
+const $ = id => document.getElementById(id);
+
+function dateKey(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function todayKey(){ return dateKey(new Date()); }
+function dayMillis(d){ return new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(); }
+
+function fmtHMS(sec){ sec=Math.floor(sec); const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60; return pad(h)+":"+pad(m)+":"+pad(s); }
+function fmtHuman(sec){ sec=Math.floor(sec); const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60); return h>0 ? (h+"時間"+m+"分") : (m+"分"); }
+function fmtHM(sec){ sec=Math.floor(sec); const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60); return h+":"+pad(m); }
+
+/* ===== 経過の確定（日付をまたいでも正しく各日へ加算） ===== */
+function commitElapsed(now){
+  if(!state.run) return;
+  let since = state.run.runningSince;
+  while(since < now){
+    const d = new Date(since);
+    const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1).getTime(); // 翌日0時
+    const segEnd = Math.min(dayEnd, now);
+    const secs = (segEnd - since)/1000;
+    const k = dateKey(d);
+    state.days[k] = (state.days[k]||0) + secs;
+    since = segEnd;
+  }
+  state.run.runningSince = now;
+}
+
+/* ===== 集計 ===== */
+function todaySeconds(){ return state.days[todayKey()]||0; }
+
+function weekSeconds(){
+  // 週は月曜始まり
+  const now = new Date();
+  const base = new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const mondayOffset = (base.getDay()+6)%7; // 月=0
+  base.setDate(base.getDate()-mondayOffset);
+  let sum=0;
+  for(let i=0;i<7;i++){
+    const d = new Date(base.getFullYear(),base.getMonth(),base.getDate()+i);
+    sum += state.days[dateKey(d)]||0;
+  }
+  return sum;
+}
+function monthSeconds(){
+  const now=new Date();
+  const prefix = now.getFullYear()+"-"+pad(now.getMonth()+1)+"-";
+  let sum=0;
+  for(const k in state.days){ if(k.startsWith(prefix)) sum += state.days[k]; }
+  return sum;
+}
+function hasRecord(d){ return (state.days[dateKey(d)]||0) > 0; }
+function streakDays(){
+  // 記録のある日が連続した数。今日未記録でも昨日まで続いていれば継続。
+  let cursor = new Date();
+  cursor = new Date(cursor.getFullYear(),cursor.getMonth(),cursor.getDate());
+  if(!hasRecord(cursor)) cursor.setDate(cursor.getDate()-1); // 今日が無ければ昨日から数える
+  let n=0;
+  while(hasRecord(cursor)){ n++; cursor.setDate(cursor.getDate()-1); }
+  return n;
+}
+
+/* ===== 描画 ===== */
+function renderTimer(now){
+  const t = $("timer");
+  if(state.run){
+    t.textContent = fmtHMS((now - state.run.sessionStart)/1000);
+    t.classList.add("run");
+  }else{
+    t.textContent = "00:00:00";
+    t.classList.remove("run");
+  }
+  $("todayLine").textContent = "本日 " + fmtHuman(todaySeconds());
+}
+
+function renderToggle(){
+  const b = $("toggle");
+  if(state.run){ b.textContent="ストップ"; b.classList.add("run"); }
+  else{ b.textContent="スタート"; b.classList.remove("run"); }
+}
+
+function renderGoal(){
+  const goalSec = state.goalMinutes*60;
+  const ts = todaySeconds();
+  if(goalSec>0){
+    const pct = Math.min(100, ts/goalSec*100);
+    $("goalFill").style.width = pct+"%";
+    $("goalText").textContent = "本日 "+fmtHM(ts)+" / 目標 "+fmtHM(goalSec)+"（"+Math.round(ts/goalSec*100)+"%）";
+  }else{
+    $("goalFill").style.width = "0%";
+    $("goalText").textContent = "目標未設定";
+  }
+}
+
+function renderStats(){
+  $("weekVal").textContent  = fmtHuman(weekSeconds());
+  $("monthVal").textContent = fmtHuman(monthSeconds());
+  $("streakVal").textContent = streakDays()+"日";
+}
+
+function renderChart(){
+  const W=340,H=150,padX=2,padT=12,padB=18;
+  const chartH = H-padT-padB;
+  const n=30;
+  const today = new Date();
+  const days=[];
+  for(let i=n-1;i>=0;i--){
+    const d = new Date(today.getFullYear(),today.getMonth(),today.getDate()-i);
+    const k = dateKey(d);
+    days.push({ key:k, val:state.days[k]||0, isToday:(i===0), date:d });
+  }
+  const goalSec = state.goalMinutes*60;
+  const maxVal = Math.max(goalSec, ...days.map(d=>d.val), 1);
+  const slot=(W-2*padX)/n, bw=slot*0.66;
+  const baseY = H-padB;
+
+  let bars="";
+  days.forEach((d,i)=>{
+    const h = d.val>0 ? Math.max(2, d.val/maxVal*chartH) : 0;
+    const x = padX + slot*i + (slot-bw)/2;
+    const y = baseY - h;
+    const fill = d.isToday ? "var(--bar-today)" : "var(--bar)";
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${fill}" data-key="${d.key}" data-val="${Math.floor(d.val)}"></rect>`;
+  });
+
+  let goalLine="";
+  if(goalSec>0 && goalSec<=maxVal){
+    const gy = baseY - goalSec/maxVal*chartH;
+    goalLine = `<line x1="${padX}" y1="${gy.toFixed(1)}" x2="${W-padX}" y2="${gy.toFixed(1)}" stroke="var(--goal)" stroke-width="1" stroke-dasharray="4 3"></line>`;
+  }
+  const axis = `<line x1="${padX}" y1="${baseY}" x2="${W-padX}" y2="${baseY}" stroke="var(--line)" stroke-width="1"></line>`;
+
+  $("chart").innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">${goalLine}${axis}${bars}</svg>`;
+
+  $("chartMax").textContent = "最大 "+fmtHM(maxVal);
+}
+
+function renderAll(now){
+  now = now || Date.now();
+  renderTimer(now);
+  renderToggle();
+  renderGoal();
+  renderStats();
+  renderChart();
+}
+
+/* ===== 計測の開始/停止 ===== */
+let ticker=null;
+function startTicker(){ if(!ticker) ticker=setInterval(onTick,1000); }
+function stopTicker(){ if(ticker){ clearInterval(ticker); ticker=null; } }
+function onTick(){
+  const now=Date.now();
+  commitElapsed(now); // 毎秒その日へ加算（日付またぎも自動確定）
+  save();
+  renderAll(now);
+}
+
+$("toggle").addEventListener("click", ()=>{
+  const now=Date.now();
+  if(state.run){
+    commitElapsed(now);
+    state.run=null;
+    save(); stopTicker(); renderAll(now);
+  }else{
+    state.run={ sessionStart:now, runningSince:now };
+    save(); startTicker(); renderAll(now);
+  }
+});
+
+/* ===== 目標時間 ===== */
+$("goalInput").addEventListener("input", e=>{
+  state.goalMinutes = Math.max(0, parseInt(e.target.value,10)||0);
+  save(); renderGoal(); renderChart();
+});
+
+/* ===== グラフのタップで詳細表示 ===== */
+$("chart").addEventListener("click", e=>{
+  const r = e.target.closest("rect[data-key]");
+  if(!r) return;
+  const k = r.getAttribute("data-key");
+  const v = parseInt(r.getAttribute("data-val"),10)||0;
+  const [y,m,d] = k.split("-");
+  $("chartInfo").textContent = `${Number(m)}/${Number(d)}： ` + (v>0 ? fmtHuman(v) : "記録なし");
+});
+
+/* ===== ダウンロード共通 ===== */
+function download(filename, text, mime){
+  const blob = new Blob([text], {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+}
+
+/* ===== CSV書き出し（Excel用） ===== */
+$("csvBtn").addEventListener("click", ()=>{
+  if(state.run) commitElapsed(Date.now()), save();
+  const keys = Object.keys(state.days).sort();
+  let rows = ["日付,秒,時間(小数),時:分"];
+  for(const k of keys){
+    const sec = Math.round(state.days[k]||0);
+    const hoursDec = (sec/3600).toFixed(2);
+    rows.push(`${k},${sec},${hoursDec},${fmtHM(sec)}`);
+  }
+  // ExcelでUTF-8を正しく開くためBOM付き・CRLF区切り
+  const csv = "﻿" + rows.join("\r\n") + "\r\n";
+  download(`sidejob_${todayKey()}.csv`, csv, "text/csv;charset=utf-8");
+});
+
+/* ===== JSONバックアップ ===== */
+$("jsonBtn").addEventListener("click", ()=>{
+  if(state.run) commitElapsed(Date.now()), save();
+  const data = {
+    version:1,
+    exportedAt:new Date().toISOString(),
+    goalMinutes:state.goalMinutes,
+    days:state.days
+  };
+  download(`sidejob_backup_${todayKey()}.json`, JSON.stringify(data,null,2), "application/json");
+});
+
+/* ===== JSONから復元 ===== */
+$("importBtn").addEventListener("click", ()=> $("importFile").click());
+$("importFile").addEventListener("change", e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const o = JSON.parse(reader.result);
+      if(!o || typeof o.days!=="object") throw new Error("形式が不正です");
+      // 値の検証
+      const days={};
+      for(const k in o.days){
+        if(/^\d{4}-\d{2}-\d{2}$/.test(k) && isFinite(o.days[k])) days[k]=Number(o.days[k]);
+      }
+      if(!confirm("現在のデータをバックアップの内容で上書きします。よろしいですか？")) return;
+      state.run=null; stopTicker();
+      state.days=days;
+      state.goalMinutes=Number(o.goalMinutes)||0;
+      save();
+      $("goalInput").value = state.goalMinutes||"";
+      renderAll();
+      $("chartInfo").textContent = "復元しました（" + Object.keys(days).length + "日分）";
+    }catch(err){
+      alert("復元に失敗しました：" + err.message);
+    }finally{
+      e.target.value = ""; // 同じファイルを再選択できるように
+    }
+  };
+  reader.readAsText(file);
+});
+
+/* ===== バックグラウンド/終了時の保存と復帰 ===== */
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden){
+    if(state.run){ commitElapsed(Date.now()); save(); }
+  }else{
+    if(state.run){ commitElapsed(Date.now()); save(); }
+    renderAll();
+  }
+});
+window.addEventListener("pagehide", ()=>{ if(state.run){ commitElapsed(Date.now()); save(); } });
+
+/* ===== 起動 ===== */
+load();
+if(state.run){ commitElapsed(Date.now()); save(); startTicker(); } // タブを閉じていた間も復元
+$("goalInput").value = state.goalMinutes || "";
+renderAll();
+</script>
+</body>
+</html>
