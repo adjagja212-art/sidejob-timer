@@ -79,6 +79,29 @@
   .toggle.run{background:var(--stop);}
   .toggle:active{filter:brightness(.9);}
 
+  /* 今日の累計を手動修正 */
+  .edit-toggle{
+    margin-top:10px;background:transparent;border:1px solid rgba(255,255,255,0.18);
+    color:var(--muted);font-size:13px;padding:6px 14px;border-radius:8px;
+    cursor:pointer;touch-action:manipulation;
+  }
+  .edit-toggle:disabled{opacity:.5;}
+  .edit-panel{margin-top:12px;}
+  .edit-row{display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;color:var(--muted);}
+  .edit-row input{
+    width:64px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    color:var(--text);font-size:16px;padding:8px;text-align:right;
+  }
+  .edit-btns{display:flex;gap:8px;justify-content:center;margin-top:10px;}
+  .edit-btns button{
+    flex:1;max-width:130px;height:44px;border-radius:9px;border:1px solid rgba(255,255,255,0.14);
+    background:var(--panel2);color:var(--text);font-size:15px;font-weight:600;
+    cursor:pointer;touch-action:manipulation;
+  }
+  .edit-btns button:disabled{opacity:.45;cursor:not-allowed;}
+  .edit-btns button:active{filter:brightness(1.2);}
+  .edit-msg{font-size:12px;color:var(--muted);min-height:1.1em;margin-top:8px;text-align:center;}
+
   /* 目標 */
   .goal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;color:var(--muted);}
   .goal-head input{
@@ -120,6 +143,19 @@
   <section class="timer-card">
     <div class="timer" id="timer">00:00:00</div>
     <div class="today" id="todayLine">本日 0分</div>
+    <button type="button" class="edit-toggle" id="editToggle">時間を修正</button>
+    <div class="edit-panel" id="editPanel" hidden>
+      <div class="edit-row">
+        <input type="number" id="editH" inputmode="numeric" min="0" step="1" placeholder="0">時間
+        <input type="number" id="editM" inputmode="numeric" min="0" step="1" placeholder="0">分
+      </div>
+      <div class="edit-btns">
+        <button type="button" id="editSet">上書き</button>
+        <button type="button" id="editAdd">＋加算</button>
+        <button type="button" id="editSub">−減算</button>
+      </div>
+      <div class="edit-msg" id="editMsg"></div>
+    </div>
     <button class="toggle" id="toggle">スタート</button>
   </section>
 
@@ -325,6 +361,12 @@ function renderChart(){
   $("chartMax").textContent = "最大 "+fmtHM(maxVal);
 }
 
+function renderEdit(){
+  // 計測中は手動修正の実行ボタンを無効化（安全側）
+  const run = !!state.run;
+  ["editSet","editAdd","editSub"].forEach(id=>{ $(id).disabled = run; });
+}
+
 function renderAll(now){
   now = now || Date.now();
   renderTimer(now);
@@ -332,6 +374,7 @@ function renderAll(now){
   renderGoal();
   renderStats();
   renderChart();
+  renderEdit();
 }
 
 /* ===== 計測の開始/停止 ===== */
@@ -361,6 +404,62 @@ $("toggle").addEventListener("click", ()=>{
 $("goalInput").addEventListener("input", e=>{
   state.goalMinutes = Math.max(0, parseInt(e.target.value,10)||0);
   save(); renderGoal(); renderChart();
+});
+
+/* ===== 今日の累計を手動修正（今日のみ） ===== */
+function fmtHMfull(sec){ sec=Math.max(0,Math.floor(sec)); return Math.floor(sec/3600)+"時間"+Math.floor(sec%3600/60)+"分"; }
+function readEditDelta(){
+  const h=Math.max(0, parseInt($("editH").value,10)||0);
+  const m=Math.max(0, parseInt($("editM").value,10)||0);
+  return h*3600 + m*60;
+}
+function fillEditInputs(){
+  const sec=todaySeconds();
+  $("editH").value=Math.floor(sec/3600);
+  $("editM").value=Math.floor(sec%3600/60);
+}
+function setTodaySeconds(sec){
+  const k=todayKey();
+  sec=Math.max(0, Math.round(sec));      // 0未満は0で止める
+  if(sec>0) state.days[k]=sec; else delete state.days[k];
+}
+function applyTodayEdit(target, label){
+  setTodaySeconds(target);
+  save(); renderAll(); fillEditInputs();
+  $("editMsg").textContent = label+"（本日 "+fmtHMfull(todaySeconds())+"）";
+}
+function editBlockedWhileRunning(){
+  if(state.run){ alert("計測を止めてから修正してください"); return true; }
+  return false;
+}
+
+$("editToggle").addEventListener("click", ()=>{
+  if(editBlockedWhileRunning()) return;
+  const p=$("editPanel");
+  if(p.hidden){ fillEditInputs(); $("editMsg").textContent=""; p.hidden=false; }
+  else { p.hidden=true; }
+});
+
+// 上書き：入力した値そのものに置き換え（確認あり）
+$("editSet").addEventListener("click", ()=>{
+  if(editBlockedWhileRunning()) return;
+  const target=readEditDelta();
+  if(!confirm("今日の記録を"+fmtHMfull(target)+"に変更します。よろしいですか?")) return;
+  applyTodayEdit(target, "上書きしました");
+});
+
+// 加算：現在の累計に足す（確認なし）
+$("editAdd").addEventListener("click", ()=>{
+  if(editBlockedWhileRunning()) return;
+  applyTodayEdit(todaySeconds()+readEditDelta(), "加算しました");
+});
+
+// 減算：現在の累計から引く（0未満は0。確認あり）
+$("editSub").addEventListener("click", ()=>{
+  if(editBlockedWhileRunning()) return;
+  const target=Math.max(0, todaySeconds()-readEditDelta());
+  if(!confirm("今日の記録を"+fmtHMfull(target)+"に変更します。よろしいですか?")) return;
+  applyTodayEdit(target, "減算しました");
 });
 
 /* ===== グラフのタップで詳細表示 ===== */
